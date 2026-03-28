@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Plane - Ultimate Edition</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    
+    <style>
+        body { background-color: #2c3e50; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: 'Press Start 2P', cursive; flex-direction: column; transition: background-color 1s ease; }
+        #game-wrapper { background-color: #ecf0f1; padding: 15px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative; }
+        #game-container { position: relative; width: 320px; height: 400px; overflow: hidden; border-radius: 10px; border: 4px solid #34495e; }
+        #birdCanvas { display: block; background: linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%); transition: background 1s ease; }
+        .ui-layer { position: absolute; top: 50px; width: 100%; text-align: center; color: #fff; font-size: 12px; pointer-events: none; text-shadow: 2px 2px 0 #2c3e50; line-height: 1.8; z-index: 5; }
+        #answers-container { display: flex; justify-content: space-between; width: 320px; margin-top: 15px; }
+        .ans-btn { font-family: 'Press Start 2P', cursive; font-size: 14px; padding: 15px 0; background-color: #f1c40f; color: #d35400; border: none; border-radius: 8px; cursor: pointer; width: 31%; box-shadow: 0 6px 0 #f39c12; transition: all 0.2s ease; }
+        .ans-btn.correct-click { background-color: #2ecc71 !important; color: white !important; box-shadow: 0 6px 0 #27ae60 !important; transform: scale(1.1); }
+        .ans-btn.wrong-click { background-color: #e74c3c !important; color: white !important; box-shadow: 0 6px 0 #c0392b !important; transform: scale(0.9); }
+        .ans-btn.shuffle-warn { background-color: #9b59b6 !important; color: white !important; box-shadow: 0 6px 0 #8e44ad !important; }
+        
+        #game-over-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.85); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 20; color: white; border-radius: 10px; text-align: center; }
+        #game-over-screen h2 { color: #e74c3c; font-size: 16px; margin-bottom: 15px; text-shadow: 2px 2px 0 #000; }
+        .stats-box { background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 10px; line-height: 2; border: 1px dashed #f1c40f; }
+        .stats-box span { color: #f1c40f; }
+        .diff-container { display: flex; flex-direction: column; gap: 8px; width: 80%; }
+        .menu-btn { font-family: 'Press Start 2P', cursive; font-size: 10px; padding: 12px; border: 2px solid #fff; border-radius: 5px; cursor: pointer; text-transform: uppercase; transition: 0.2s; }
+        .btn-easy { background-color: #2ecc71; color: #fff; border-color: #27ae60; }
+        .btn-medium { background-color: #f39c12; color: #fff; border-color: #d35400; }
+        .btn-hard { background-color: #e74c3c; color: #fff; border-color: #c0392b; }
+        .btn-restart { background-color: #3498db; color: #fff; border-color: #2980b9; margin-bottom: 5px;}
+        .menu-btn:hover { transform: scale(1.05); }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <div id="game-container">
+            <div class="ui-layer" id="ui-text">اضغط للبدء</div>
+            <canvas id="birdCanvas" width="320" height="400"></canvas>
+            
+            <div id="game-over-screen">
+                <h2 id="end-title">انتهت اللعبة!</h2>
+                <div class="stats-box">
+                    نقاطك: <span id="current-score-val">0</span><br>
+                    أعلى نقاط: <span id="high-score-val">0</span>
+                </div>
+                <div class="diff-container">
+                    <button class="menu-btn btn-restart" onclick="restartGame()">إعادة اللعب</button>
+                    <button class="menu-btn btn-easy" onclick="setDifficulty(1)">سهل (+)</button>
+                    <button class="menu-btn btn-medium" onclick="setDifficulty(2)">متوسط (-)</button>
+                    <button class="menu-btn btn-hard" onclick="setDifficulty(3)">صعب (× ÷ أقواس)</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="answers-container">
+            <button class="ans-btn" id="btn-0">?</button>
+            <button class="ans-btn" id="btn-1">?</button>
+            <button class="ans-btn" id="btn-2">?</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("birdCanvas");
+        const ctx = canvas.getContext("2d");
+        const uiText = document.getElementById("ui-text");
+        const gameOverScreen = document.getElementById("game-over-screen");
+        const btns = [document.getElementById("btn-0"), document.getElementById("btn-1"), document.getElementById("btn-2")];
+
+        // فيزياء اللعبة
+        let plane = { x: 40, y: 150, width: 34, height: 20, velocity: 0, gravity: 0.15, jump: -3.5 };
+        let pipes = [];
+        let stars = []; 
+        let pipeWidth = 50;
+        let basePipeGap = 170; // تم تغييره لمتغير ليضيق تدريجياً
+        let currentPipeGap = 170;
+        
+        let frame = 0;
+        let score = 0;
+        let lives = 3; 
+        
+        let startingLevel = 1; 
+        let currentLevel = 1;
+        let powerUpActive = false; 
+        let isGameOver = false;
+        let gameStarted = false;
+        let baseSpeed = 0.8; 
+        let currentSpeed = 0.8;
+
+        let highScore = localStorage.getItem("mathPlaneHighScore") || 0;
+
+        // دالة توليد الأسئلة الذكية (تعتمد على المستوى والنقاط الحالية)
+        function generateQuestion(level, currentScore) {
+            let a, b, correctAns, text;
+            
+            if (level === 1) { 
+                // سهل: جمع
+                a = Math.floor(Math.random() * 10) + 1; 
+                b = Math.floor(Math.random() * 10) + 1;
+                correctAns = a + b; text = `${a} + ${b} = ?`;
+            } 
+            else if (level === 2) { 
+                // متوسط: طرح (دائماً موجب)
+                a = Math.floor(Math.random() * 15) + 5; 
+                b = Math.floor(Math.random() * a); 
+                correctAns = a - b; text = `${a} - ${b} = ?`;
+            } 
+            else { 
+                // صعب: متدرج حسب النقاط
+                if (currentScore < 5) {
+                    // أول 5 أعمدة: ضرب
+                    a = Math.floor(Math.random() * 6) + 2; 
+                    b = Math.floor(Math.random() * 6) + 2;
+                    correctAns = a * b; text = `${a} × ${b} = ?`;
+                } else if (currentScore < 10) {
+                    // من 5 إلى 10 أعمدة: قسمة (ناتج صحيح)
+                    let ans = Math.floor(Math.random() * 8) + 2;
+                    let div = Math.floor(Math.random() * 5) + 2;
+                    let dividend = ans * div;
+                    correctAns = ans; text = `${dividend} ÷ ${div} = ?`;
+                } else {
+                    // بعد 10 أعمدة: مسائل مركبة (أقواس مع جمع/طرح و ضرب)
+                    a = Math.floor(Math.random() * 4) + 1; // 1 to 4
+                    b = Math.floor(Math.random() * 4) + 2; // 2 to 5
+                    let c = Math.floor(Math.random() * 10) + 1;
+                    
+                    if (Math.random() > 0.5) {
+                        // (a * b) + c
+                        correctAns = (a * b) + c; 
+                        text = `(${a}×${b})+${c}`;
+                    } else {
+                        // (a * b) - c (التأكد من أن الناتج موجب)
+                        let prod = a * b;
+                        c = Math.floor(Math.random() * prod); // c أصغر من الضرب
+                        correctAns = prod - c; 
+                        text = `(${a}×${b})-${c}`;
+                    }
+                }
+            }
+
+            // توليد خيارات خاطئة ذكية قريبة من الإجابة الصحيحة
+            let wrong1 = correctAns + Math.floor(Math.random() * 4) + 1;
+            let wrong2 = Math.max(0, correctAns - Math.floor(Math.random() * 4) - 1); 
+            if (wrong1 === wrong2 || wrong2 === correctAns) wrong2 += 2;
+            
+            let options = [correctAns, wrong1, wrong2];
+            options.sort(() => Math.random() - 0.5); // خلط الخيارات
+            
+            return { 
+                text: text, 
+                options: options, 
+                correctAns: correctAns, 
+                correctIndex: options.indexOf(correctAns) 
+            };
+        }
+
+        function updateLevelDesign() {
+            currentLevel = startingLevel; // تثبيت المستوى على اختيار اللاعب
+            // تغيير لون الخلفية بناءً على المستوى لتنبيه اللاعب
+            if (currentLevel === 3) canvas.style.background = "linear-gradient(to bottom, #141e30 0%, #243b55 100%)"; 
+            else if (currentLevel === 2) canvas.style.background = "linear-gradient(to bottom, #2b5876 0%, #4e4376 100%)"; 
+            else canvas.style.background = "linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%)"; 
+        }
+
+        function showGameOverMenu() {
+            if (score > highScore) { 
+                highScore = score; 
+                localStorage.setItem("mathPlaneHighScore", highScore); 
+                document.getElementById("end-title").innerText = "رقم قياسي جديد! 🎉";
+            } else {
+                document.getElementById("end-title").innerText = "انتهت اللعبة!";
+            }
+            document.getElementById("current-score-val").innerText = score;
+            document.getElementById("high-score-val").innerText = highScore;
+            gameOverScreen.style.display = "flex"; 
+        }
+
+        function handleLoss(reason) {
+            lives--;
+            if (lives <= 0) {
+                isGameOver = true; uiText.innerText = ""; showGameOverMenu(); 
+            } else {
+                uiText.innerText = reason + "\nتبقت " + lives + " محاولات";
+                plane.y = 150; plane.velocity = plane.jump; 
+                pipes = []; stars = []; btns.forEach(btn => btn.innerText = "?");
+                setTimeout(() => { if(!isGameOver) uiText.innerText = ""; }, 1500);
+            }
+        }
+
+        function setDifficulty(level) { 
+            startingLevel = level; 
+            restartGame(); 
+        }
+
+        function restartGame() {
+            gameOverScreen.style.display = "none";
+            plane.y = 150; plane.velocity = 0; pipes = []; stars = [];
+            score = 0; frame = 0; lives = 3; powerUpActive = false;
+            currentSpeed = baseSpeed; currentPipeGap = basePipeGap;
+            isGameOver = false; gameStarted = false; 
+            updateLevelDesign(); uiText.innerText = "اضغط للبدء";
+            btns.forEach(btn => btn.innerText = "?");
+            gameLoop();
+        }
+
+        function checkAnswer(selectedIndex, btnElement) {
+            if (!gameStarted || isGameOver) return;
+            let targetPipe = pipes.find(p => !p.unlocked && !p.passed);
+            
+            if (targetPipe) {
+                if (selectedIndex === targetPipe.qData.correctIndex) {
+                    targetPipe.unlocked = true; uiText.innerText = "رائع!";
+                    btnElement.classList.add("correct-click");
+                    
+                    // زيادة الصعوبة الفيزيائية قليلاً مع كل إجابة صحيحة
+                    currentSpeed += 0.02; 
+                    currentPipeGap = Math.max(110, currentPipeGap - 1.5); 
+
+                    setTimeout(() => { btnElement.classList.remove("correct-click"); uiText.innerText = ""; }, 400);
+                } else {
+                    btnElement.classList.add("wrong-click");
+                    setTimeout(() => btnElement.classList.remove("wrong-click"), 400);
+                    handleLoss("إجابة خاطئة!");
+                }
+            }
+        }
+
+        btns.forEach((btn, index) => {
+            btn.addEventListener("mousedown", (e) => { e.preventDefault(); checkAnswer(index, btn); });
+            btn.addEventListener("touchstart", (e) => { e.preventDefault(); checkAnswer(index, btn); });
+        });
+
+        function flap(e) {
+            if (e.target.classList.contains('ans-btn') || gameOverScreen.style.display === "flex") return; 
+            e.preventDefault(); // منع التحديد أثناء اللمس
+            if (!gameStarted && !isGameOver) { gameStarted = true; uiText.innerText = ""; plane.velocity = plane.jump; } 
+            else if (!isGameOver) plane.velocity = plane.jump;
+        }
+
+        window.addEventListener("keydown", (e) => { if(e.code === "Space") flap(e); });
+        canvas.addEventListener("mousedown", flap);
+        canvas.addEventListener("touchstart", flap, {passive: false});
+
+        function drawPlane() {
+            ctx.save(); ctx.translate(plane.x, plane.y);
+            let rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, (plane.velocity * 0.1)));
+            ctx.rotate(rotation);
+            ctx.fillStyle = "#e74c3c"; ctx.beginPath(); ctx.ellipse(17, 10, 17, 8, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#87ceeb"; ctx.beginPath(); ctx.arc(24, 6, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#c0392b"; ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(-5, -2); ctx.lineTo(8, 5); ctx.fill();
+            ctx.fillStyle = "#bdc3c7"; ctx.fillRect(32, 5, 4, 10);
+            ctx.restore();
+        }
+
+        function drawStar(cx, cy, spikes, outerRadius, innerRadius) {
+            let rot = Math.PI / 2 * 3; let x = cx, y = cy, step = Math.PI / spikes;
+            ctx.beginPath(); ctx.moveTo(cx, cy - outerRadius);
+            for (let i = 0; i < spikes; i++) {
+                x = cx + Math.cos(rot) * outerRadius; y = cy + Math.sin(rot) * outerRadius; ctx.lineTo(x, y); rot += step;
+                x = cx + Math.cos(rot) * innerRadius; y = cy + Math.sin(rot) * innerRadius; ctx.lineTo(x, y); rot += step;
+            }
+            ctx.lineTo(cx, cy - outerRadius); ctx.closePath();
+            ctx.fillStyle = "#f1c40f"; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.stroke();
+        }
+
+        function activatePowerUp() {
+            powerUpActive = true; uiText.innerText = "⏰ إبطاء الزمن!";
+            setTimeout(() => { powerUpActive = false; if(!isGameOver && lives > 0) uiText.innerText = ""; }, 4000); 
+        }
+
+        function drawHUD() {
+            ctx.fillStyle = "#fff"; ctx.font = "10px 'Press Start 2P'";
+            let levelText = "نقاط: " + score; ctx.fillText(levelText, 10, 25);
+            let textWidth = ctx.measureText(levelText).width;
+            let heartsText = ""; for(let i = 0; i < lives; i++) heartsText += "❤️";
+            ctx.fillText(heartsText, 10 + textWidth + 15, 25);
+        }
+
+        function manageStars() {
+            let speed = powerUpActive ? currentSpeed / 2 : currentSpeed; 
+            for (let i = stars.length - 1; i >= 0; i--) {
+                let s = stars[i]; s.x -= speed; 
+                drawStar(s.x, s.y, 5, s.radius, s.radius / 2);
+                let dist = Math.hypot((plane.x + plane.width/2) - s.x, (plane.y + plane.height/2) - s.y);
+                if (dist < 25) { stars.splice(i, 1); activatePowerUp(); }
+            }
+        }
+
+        function managePipes() {
+            let speed = powerUpActive ? currentSpeed / 2 : currentSpeed; 
+
+            // تعديل معدل إنتاج الأنابيب ليتناسب مع السرعة
+            let spawnRate = Math.max(150, Math.floor(350 / speed));
+
+            if (frame % spawnRate === 0) {
+                let topHeight = Math.random() * (canvas.height - currentPipeGap - 80) + 40;
+                let qData = generateQuestion(currentLevel, score); // إرسال السكور للدالة
+                let willTrick = Math.random() > 0.7;
+
+                pipes.push({ 
+                    x: canvas.width, topHeight: topHeight, bottomY: topHeight + currentPipeGap,
+                    bottomHeight: canvas.height - topHeight - currentPipeGap, passed: false, unlocked: false,
+                    qData: qData, willTrick: willTrick, tricked: false, uiDisplayed: false 
+                });
+
+                if (Math.random() > 0.6) {
+                    stars.push({ x: canvas.width + (pipeWidth / 2), y: topHeight + (currentPipeGap / 2), radius: 10 });
+                }
+            }
+
+            let activePipe = pipes.find(p => !p.unlocked && !p.passed);
+            if (activePipe && !activePipe.uiDisplayed) {
+                btns.forEach((btn, i) => btn.innerText = activePipe.qData.options[i]);
+                activePipe.uiDisplayed = true; 
+            }
+
+            for (let i = 0; i < pipes.length; i++) {
+                let p = pipes[i]; p.x -= speed; 
+
+                if (p.willTrick && !p.tricked && p.x < canvas.width / 1.5 && !p.unlocked) {
+                    p.tricked = true; p.qData.options.sort(() => Math.random() - 0.5);
+                    p.qData.correctIndex = p.qData.options.indexOf(p.qData.correctAns);
+                    
+                    if(activePipe === p) {
+                        btns.forEach((btn, index) => {
+                            btn.classList.add("shuffle-warn"); btn.innerText = p.qData.options[index];
+                            setTimeout(() => btn.classList.remove("shuffle-warn"), 300);
+                        });
+                    }
+                }
+
+                ctx.fillStyle = p.unlocked ? "#2ecc71" : "#e74c3c"; ctx.fillRect(p.x, 0, pipeWidth, p.topHeight);
+                ctx.fillStyle = p.unlocked ? "#27ae60" : "#c0392b"; ctx.fillRect(p.x - 2, p.topHeight - 15, pipeWidth + 4, 15);
+                
+                ctx.fillStyle = p.unlocked ? "#2ecc71" : "#e74c3c"; ctx.fillRect(p.x, p.bottomY, pipeWidth, p.bottomHeight);
+                ctx.fillStyle = p.unlocked ? "#27ae60" : "#c0392b"; ctx.fillRect(p.x - 2, p.bottomY, pipeWidth + 4, 15);
+
+                // تصغير الخط للمسائل الطويلة (مثل الأقواس)
+                ctx.fillStyle = "#FFF"; 
+                ctx.font = p.qData.text.length > 9 ? "8px 'Press Start 2P'" : "10px 'Press Start 2P'";
+                
+                // تعديل التمركز ليبقى النص في المنتصف
+                let textOffset = p.qData.text.length > 9 ? 15 : 10;
+                ctx.fillText(p.qData.text, p.x - textOffset, p.topHeight - 25);
+
+                if (p.x + pipeWidth < plane.x && !p.passed) {
+                    score++; p.passed = true; 
+                }
+
+                // Hitbox التسامحي: تم تقليص منطقة الاصطدام للطائرة بمقدار 2 بكسل للمساعدة
+                let tolerance = 2;
+                let hitTop = (plane.x + tolerance) < p.x + pipeWidth && (plane.x + plane.width - tolerance) > p.x && (plane.y + tolerance) < p.topHeight;
+                let hitBottom = (plane.x + tolerance) < p.x + pipeWidth && (plane.x + plane.width - tolerance) > p.x && (plane.y + plane.height - tolerance) > p.bottomY;
+                let hitBarrier = (plane.x + plane.width - tolerance) > p.x && (plane.x + tolerance) < p.x + pipeWidth && !p.unlocked;
+
+                if (hitTop || hitBottom || hitBarrier) {
+                    if(hitBarrier && !hitTop && !hitBottom) handleLoss("الطريق مغلق!");
+                    else handleLoss("اصطدام!");
+                }
+            }
+            pipes = pipes.filter(p => p.x + pipeWidth > 0);
+        }
+
+        function gameLoop() {
+            if (isGameOver) return; 
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (gameStarted) {
+                plane.velocity += plane.gravity; plane.y += plane.velocity;
+                manageStars(); managePipes(); frame++;
+            }
+            if (plane.y + plane.height >= canvas.height || plane.y <= 0) handleLoss("خروج عن المسار!");
+            
+            drawPlane(); drawHUD(); 
+            requestAnimationFrame(gameLoop);
+        }
+
+        updateLevelDesign();
+        gameLoop();
+    </script>
+</body>
+</html>
